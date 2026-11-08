@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0e">
+<title>DualCam — Kamera Dual-Output + Studio</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<style>
+:root{--bg:#0b0b0e;--pn:#15151b;--ln:#2a2a35;--tx:#e8e8ee;--mu:#8d8d9c;--ac:#37e0c4;--rd:#ff4d5e}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif}
+header{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--ln);position:sticky;top:0;background:var(--bg);z-index:5}
+header b{letter-spacing:.5px}nav{display:flex;gap:4px;margin-left:8px;flex:1}
+button,select,input[type=text],input[type=password]{background:#20202a;color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:7px 10px;font:inherit}
+button{cursor:pointer}button:hover{border-color:var(--ac)}button.on,button.pri{background:var(--ac);color:#04110e;border-color:var(--ac);font-weight:600}
+button.rec{background:var(--rd);border-color:var(--rd);color:#fff;font-weight:700}
+button:disabled{opacity:.4;cursor:default}
+.grid{display:grid;grid-template-columns:1fr 360px;gap:12px;padding:12px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.stage{background:#000;border-radius:10px;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px}
+.wrap{position:relative;max-width:100%;line-height:0}
+.wrap canvas{max-width:100%;max-height:72vh;display:block}
+.guide{position:absolute;border:2px solid;pointer-events:none}.guide.l{border-color:#37e0ff}.guide.p{border-color:#ffb037}
+.panel{display:flex;flex-direction:column;gap:8px}
+details{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:6px 10px}
+summary{cursor:pointer;font-weight:600;padding:4px 0}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap}
+.row label{flex:0 0 105px;color:var(--mu);font-size:12px}.row input[type=range]{flex:1;min-width:100px}
+.row.h{display:none}.btns{display:flex;gap:6px;flex-wrap:wrap}
+.recipes{display:grid;grid-template-columns:1fr 1fr;gap:6px}.recipes button{text-align:left;font-size:12px}
+.small{color:var(--mu);font-size:12px;line-height:1.4}
+dialog{background:var(--pn);color:var(--tx);border:1px solid var(--ln);border-radius:12px;max-width:min(900px,94vw);width:100%}
+dialog::backdrop{background:#000a}
+.gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:10px 0}
+.gi{background:#0b0b0e;border:1px solid var(--ln);border-radius:8px;padding:6px;font-size:11px}
+.gi img,.gi video{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;background:#000}
+.gi .btns button{padding:3px 6px;font-size:11px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#222;border:1px solid var(--ac);padding:8px 14px;border-radius:20px;display:none;z-index:20;max-width:90vw}
+progress{width:100%}
+</style>
+</head>
+<body>
+<header><b>◉ DualCam</b>
+<nav><button id="tabCam" class="on">Kamera</button><button id="tabStudio">Studio</button></nav>
+<button id="btnGal">Galeri</button></header>
+<main>
+<section id="pgCam"><div class="grid">
+ <div class="stage"><div class="wrap"><canvas id="camCv" width="1280" height="720"></canvas><div id="g1" class="guide l"></div><div id="g2" class="guide p"></div></div>
+  <div id="camInfo" class="small" style="padding:6px">Tekan “Nyalakan kamera”. Kotak cyan = landscape, oranye = portrait.</div></div>
+ <div class="panel">
+  <div class="btns"><button id="bStart" class="pri">Nyalakan kamera</button><button id="bRec" class="rec" disabled>● Rekam</button><button id="bPhoto" disabled>📷 Foto</button></div>
+  <div class="row" style="margin:0"><label>Zoom</label><input id="cZoom" type="range" min="1" max="8" step="0.05" value="1"><span id="cZoomV">1.0×</span></div>
+  <div class="btns" id="zStops"></div>
+  <details open><summary>Output</summary>
+   <div class="row"><label>Kamera</label><select id="camSel"></select></div>
+   <div class="row"><label>Mode</label><select id="cMode"><option value="both">Dual (landscape + portrait)</option><option value="landscape">Hanya landscape</option><option value="portrait">Hanya portrait</option></select></div>
+   <div class="row"><label>Rasio landscape</label><select id="cRL"></select><input id="cRLc" type="text" placeholder="W:H" style="width:80px;display:none"></div>
+   <div class="row"><label>Rasio portrait</label><select id="cRP"></select><input id="cRPc" type="text" placeholder="W:H" style="width:80px;display:none"></div>
+   <div class="row"><label>Resolusi</label><select id="cShort"><option value="720">720p (HD)</option><option value="1080" selected>1080p (Full HD)</option><option value="1440">1440p (2K)</option><option value="2160">2160p (4K)</option></select></div>
+   <div id="resNote" class="small"></div>
+   <div class="row"><label>FPS</label><select id="cFps"><option>24</option><option selected>30</option><option>60</option></select></div>
+   <div class="row"><label>Format</label><select id="cCodec"><option value="auto">Otomatis</option><option value="mp4">MP4 (H.264)</option><option value="webm">WebM (VP9/VP8)</option></select></div>
+   <div class="row"><label>Bitrate (Mbps)</label><input id="cBr" type="range" min="4" max="80" value="24"><span id="cBrV">24</span></div>
+   <div class="row"><label></label><span><input id="cMic" type="checkbox" checked> Mikrofon</span> <span><input id="cAuto" type="checkbox" checked> Auto-simpan</span></div>
+  </details>
+  <details open><summary>Filter / LUT / Look</summary>
+   <div class="row"><label>LUT .cube/.3dl</label><input id="cLutF" type="file" accept=".cube,.3dl"></div>
+   <div class="row"><label>Intensitas LUT</label><input id="cLutM" type="range" min="0" max="1" step="0.01" value="1"></div>
+   <div class="row"><label>Recipe live</label><select id="cRecipe"></select></div>
+   <div class="small">Recipe diterapkan langsung ke preview <i>dan</i> hasil rekaman.</div>
+  </details>
+  <details><summary>Manual (jika didukung browser)</summary><div id="proBox" class="small">Nyalakan kamera dulu.</div></details>
+ </div></div></section>
+
+<section id="pgStudio" hidden><div class="grid">
+ <div class="stage"><div class="wrap"><canvas id="stCv" width="1280" height="720"></canvas></div>
+  <div id="vidBar" style="width:100%;padding:6px;display:none"><div class="btns"><button id="vPlay">▶︎ / ❚❚</button><input id="vSeek" type="range" min="0" max="1000" value="0" style="flex:1"><span id="vTime" class="small">0:00</span></div></div>
+  <div id="stInfo" class="small" style="padding:6px">Buka foto/video, seret &amp; lepas file ke sini, atau pilih dari Galeri.</div></div>
+ <div class="panel">
+  <details open><summary>Sumber</summary>
+   <div class="row"><input id="stFile" type="file" accept="image/*,video/*"> <button id="stGal">Dari galeri</button></div>
+   <div class="btns"><button id="bPeek">Tahan: lihat asli</button><button id="bOrig" style="display:none">Kembalikan sumber asli</button></div>
+   <div class="row"><label>Ukuran render</label><select id="outMax"><option value="1280">1280</option><option value="1920" selected>1920</option><option value="2560">2560</option><option value="3840">3840</option></select></div>
+  </details>
+  <details open><summary>Recipes</summary><div id="recipes" class="recipes"></div></details>
+  <div id="paramBox"></div>
+  <details><summary>Generatif AI (Gemini)</summary>
+   <div class="small">Kunci API gratis dari Google AI Studio. Disimpan hanya di browser/perangkat ini. Pada tier gratis, Google dapat memakai data untuk pelatihan model.</div>
+   <div class="row"><label>API key</label><input id="gKey" type="password" placeholder="AIza..."></div>
+   <div class="row"><label>Model gambar</label><input id="gImgM" type="text" value="gemini-2.5-flash-image"></div>
+   <div class="row"><label>Model teks</label><input id="gTxtM" type="text" value="gemini-2.5-flash"></div>
+   <div class="row"><label>Preset</label><select id="gPreset"></select></div>
+   <div class="row"><label>Prompt</label><input id="gPrompt" type="text" placeholder="tambahan, mis. warna hangat, malam hari" style="flex:1"></div>
+   <div class="row"><label>Kemiripan</label><select id="gStr"><option value="high">Tinggi (jaga komposisi)</option><option value="mid" selected>Sedang</option><option value="low">Rendah (bebas)</option></select></div>
+   <div class="btns"><button id="gGo" class="pri">Generate gambar</button><button id="gRec">Buat recipe dari prompt</button></div>
+   <div id="gMsg" class="small"></div>
+   <div class="small">Generatif gambar memakai frame saat ini (untuk video: frame yang sedang tampil). Hasilnya menjadi sumber baru yang bisa diberi gaya &amp; efek lagi.</div>
+  </details>
+  <details open><summary>Ekspor</summary>
+   <div class="row"><label>Gambar</label><button id="epng">PNG</button><button id="ejpg">JPG</button><button id="eTxt">Salin teks ASCII</button></div>
+   <div class="row"><label>Video (real-time)</label><select id="eFps"><option>24</option><option selected>30</option><option>60</option></select><button id="eVid" class="pri">Ekspor video</button></div>
+   <progress id="eProg" value="0" max="1" style="display:none"></progress>
+   <div class="small">Ekspor video memutar klip dari awal pada kecepatan normal sambil merekam hasil render (audio ikut jika ada).</div>
+  </details>
+ </div></div></section>
+</main>
+<dialog id="gal"><div class="row"><b style="flex:1">Galeri (tersimpan di browser ini)</b><button id="galX">Tutup</button></div><div id="galGrid" class="gg"></div></dialog>
+<div id="toast"></div>
+<script>
+"use strict";
+//#PURE-START
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const even=x=>Math.max(2,Math.round(x/2)*2);
+const once=(el,ev)=>new Promise(r=>el.addEventListener(ev,r,{once:true}));
+function hex(h){const n=parseInt(String(h).replace('#',''),16)||0;return [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255];}
+
+/* ---------- LUT parser (.cube / .3dl) -> {size,data(Float32 RGB, r tercepat)} ---------- */
+function parseCube(text){
+  let n=0;const v=[];
+  for(const raw of text.split(/\r?\n/)){
+    const l=raw.trim();if(!l||l[0]==='#')continue;
+    const p=l.split(/\s+/);const k=p[0].toUpperCase();
+    if(k==='LUT_3D_SIZE')n=parseInt(p[1]);
+    else if(k==='LUT_1D_SIZE')throw new Error('LUT 1D belum didukung, gunakan LUT 3D');
+    else if(p.length>=3&&/^[-.\d]/.test(p[0])){v.push(+p[0],+p[1],+p[2]);}
+  }
+  if(!(n>1)||v.length<n*n*n*3)throw new Error('File .cube tidak valid');
+  return {size:n,data:new Float32Array(v.slice(0,n*n*n*3))};
+}
+function parse3dl(text){
+  const rows=[];let n=0;
+  for(const raw of text.split(/\r?\n/)){
+    const l=raw.trim();if(!l||l[0]==='#')continue;
+    const t=l.split(/\s+/);const nums=t.map(Number);
+    if(nums.some(Number.isNaN))continue;
+    if(nums.length===3)rows.push(nums);else if(nums.length>3&&!n)n=nums.length;
+  }
+  if(!n)n=Math.round(Math.cbrt(rows.length));
+  if(!(n>1)||rows.length!==n*n*n)throw new Error('File .3dl tidak valid');
+  let mx=0;for(const r of rows)for(const x of r)if(x>mx)mx=x;
+  const sc=mx<=1.0001?1:mx<=1023?1023:mx<=4095?4095:65535;
+  const out=new Float32Array(n*n*n*3);
+  rows.forEach((r,i)=>{const b=i%n,g=Math.floor(i/n)%n,rr=Math.floor(i/(n*n));const o=(rr+g*n+b*n*n)*3;out[o]=r[0]/sc;out[o+1]=r[1]/sc;out[o+2]=r[2]/sc;});
+  return {size:n,data:out};
+}
+function parseLut(name,text){return name.toLowerCase().endsWith('.3dl')?parse3dl(text):parseCube(text);}
+
+/* ---------- Parameter, preset, palet ---------- */
+const CHARSETS={classic:' .:-=+*#%@',detailed:` .'\`^",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$`,blocks:' ░▒▓█',braille:' ⠁⠃⠇⡇⣇⣧⣷⣿',binary:' ·01'};
+const PAL_HEX={
+ gameboy:['0f380f','306230','8bac0f','9bbc0f'],cga:['000000','55ffff','ff55ff','ffffff'],
+ c64:['000000','ffffff','880000','aaffee','cc44cc','00cc55','0000aa','eeee77','dd8855','664400','ff7777','333333','777777','aaff66','0088ff','bbbbbb'],
+ pico8:['000000','1d2b53','7e2553','008751','ab5236','5f574f','c2c3c7','fff1e8','ff004d','ffa300','ffec27','00e436','29adff','83769c','ff77a8','ffccaa'],
+ vintage:['2b1d0e','5c3d1e','a0693a','d9a45b','f2e0b6'],amber:['000000','3a1f00','a35a00','ffb000']};
+const PAL={};for(const k in PAL_HEX)PAL[k]=PAL_HEX[k].map(h=>hex(h));
+const STYLES=[['none','Asli (tanpa gaya)'],['glyph','ASCII / karakter'],['dots','Titik halftone'],['cross','Silang'],['diamond','Berlian'],['diagonal','Diagonal'],['lines','Garis'],['led','LED matrix'],['lego','LEGO'],['mosaic','Mosaik'],['pixel','Pixel art'],['dither','Dither']];
+const STYLE_ID={none:0,glyph:1,dots:2,cross:3,diamond:4,diagonal:5,lines:6,led:7,lego:8,mosaic:9,pixel:10,dither:11};
+const isCell=s=>!['none','pixel','dither'].includes(s.style);
+const PARAMS=[
+ {sec:'Gaya',k:'style',l:'Gaya',t:'select',o:STYLES,d:'none'},
+ {sec:'Gaya',k:'cell',l:'Ukuran sel (px)',t:'range',min:2,max:48,step:1,d:10,show:s=>s.style!=='none'},
+ {sec:'Gaya',k:'charset',l:'Set karakter',t:'select',o:[['classic','Klasik'],['detailed','Detail'],['blocks','Blok'],['braille','Braille'],['binary','Biner'],['custom','Kustom']],d:'classic',show:s=>s.style==='glyph'},
+ {sec:'Gaya',k:'custom',l:'Karakter (gelap→terang)',t:'text',d:'.:-=+*#%@',show:s=>s.style==='glyph'&&s.charset==='custom'},
+ {sec:'Gaya',k:'colorMode',l:'Warna',t:'select',o:[['original','Warna asli'],['mono','Mono (fg/bg)']],d:'original',show:isCell},
+ {sec:'Gaya',k:'fg',l:'Warna depan',t:'color',d:'#ffffff',show:s=>s.style!=='none'&&s.style!=='pixel'&&(s.colorMode==='mono'||s.style==='dither')},
+ {sec:'Gaya',k:'bg',l:'Warna latar',t:'color',d:'#000000',show:s=>s.style!=='none'&&s.style!=='pixel'},
+ {sec:'Gaya',k:'invert',l:'Balik terang/gelap',t:'check',d:false,show:s=>s.style!=='none'&&s.style!=='pixel'},
+ {sec:'Gaya',k:'palette',l:'Palet',t:'select',o:[['none','Tanpa / posterize'],['gameboy','Game Boy'],['cga','CGA'],['c64','C64'],['pico8','PICO-8'],['vintage','Vintage hangat'],['amber','Amber']],d:'none',show:s=>s.style==='pixel'||s.style==='dither'},
+ {sec:'Gaya',k:'levels',l:'Level warna',t:'range',min:2,max:16,step:1,d:6,show:s=>s.style==='pixel'&&s.palette==='none'},
+ {sec:'Gaya',k:'bayer',l:'Matriks Bayer',t:'select',num:1,o:[[2,'2×2'],[4,'4×4'],[8,'8×8']],d:4,show:s=>s.style==='dither'},
+ {sec:'Gaya',k:'dither',l:'Kekuatan dither',t:'range',min:0,max:1,step:0.01,d:0.8,show:s=>s.style==='dither'},
+ {sec:'Warna',k:'lutMix',l:'Intensitas LUT',t:'range',min:0,max:1,step:0.01,d:1},
+ {sec:'Warna',k:'brightness',l:'Kecerahan',t:'range',min:-0.5,max:0.5,step:0.01,d:0},
+ {sec:'Warna',k:'contrast',l:'Kontras',t:'range',min:0.5,max:2,step:0.01,d:1},
+ {sec:'Warna',k:'saturation',l:'Saturasi',t:'range',min:0,max:2,step:0.01,d:1},
+ {sec:'Efek pasca-proses',k:'vignette',l:'Vignette',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'scan',l:'Scanlines',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'crt',l:'Lengkung CRT',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'chroma',l:'Aberasi kromatik',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'split',l:'RGB split',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'bloom',l:'Bloom',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'blur',l:'Blur',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'grain',l:'Film grain',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'dust',l:'Debu film',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'glitch',l:'Glitch',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'pix',l:'Pikselasi (px)',t:'range',min:0,max:32,step:1,d:0},
+ {sec:'Efek pasca-proses',k:'tintA',l:'Overlay warna',t:'range',min:0,max:1,step:0.01,d:0},
+ {sec:'Efek pasca-proses',k:'tint',l:'Warna overlay',t:'color',d:'#ff4fd8',show:s=>s.tintA>0},
+ {sec:'Efek pasca-proses',k:'animate',l:'Animasikan grain/glitch (gambar)',t:'check',d:false}
+];
+const DEF={};PARAMS.forEach(p=>DEF[p.k]=p.d);
+function sanitize(obj){ // validasi hasil AI / recipe
+  const out={};
+  for(const p of PARAMS){if(!(p.k in obj))continue;let v=obj[p.k];
+    if(p.t==='range'){v=Number(v);if(!isFinite(v))continue;out[p.k]=clamp(v,p.min,p.max);}
+    else if(p.t==='select'){const ok=p.o.some(o=>String(o[0])===String(v));if(!ok)continue;out[p.k]=p.num?+v:String(v);}
+    else if(p.t==='color'){if(/^#[0-9a-fA-F]{6}$/.test(v))out[p.k]=v;}
+    else if(p.t==='check')out[p.k]=!!v;
+    else if(p.t==='text')out[p.k]=String(v).slice(0,90);}
+  return out;
+}
+function charsFor(st){const s=st.charset==='custom'?(st.custom||' .#'):CHARSETS[st.charset]||CHARSETS.classic;const a=[...s];return a.length>1?a:[' ','#'];}
+const RECIPES=[
+ ['Matrix Code',{style:'glyph',charset:'binary',colorMode:'mono',fg:'#27ff6a',bg:'#000a03',cell:10,scan:.5,crt:.3,bloom:.6,vignette:.5}],
+ ['Film Noir',{style:'glyph',charset:'classic',colorMode:'mono',fg:'#ececec',bg:'#050505',cell:8,saturation:0,contrast:1.3,grain:.6,dust:.4,vignette:.7}],
+ ['Vaporwave',{style:'mosaic',cell:14,tintA:.35,tint:'#ff4fd8',chroma:.6,scan:.3,bloom:.5,saturation:1.4}],
+ ['Bonsai Dither',{style:'lines',cell:7,colorMode:'mono',fg:'#f3e3b0',bg:'#3a2412',contrast:1.15}],
+ ['C64 Dither',{style:'dither',palette:'c64',cell:3,bayer:4,dither:.6}],
+ ['PICO-8 Bayer-8',{style:'dither',palette:'pico8',cell:2,bayer:8,dither:.7}],
+ ['Game Boy',{style:'dither',palette:'gameboy',cell:3,bayer:4,dither:.5,contrast:1.15}],
+ ['Koran Halftone',{style:'dots',cell:9,colorMode:'mono',fg:'#121212',bg:'#f1ece0',invert:true,contrast:1.2}],
+ ['LED Billboard',{style:'led',cell:8,bloom:.5,contrast:1.1}],
+ ['Dinding LEGO',{style:'lego',cell:16,saturation:1.25}],
+ ['Braille Mono',{style:'glyph',charset:'braille',colorMode:'mono',fg:'#d0f0ff',bg:'#06080c',cell:8}],
+ ['Cyberpunk Neon',{tintA:.25,tint:'#ff2fb0',chroma:.8,bloom:.8,scan:.25,contrast:1.2,saturation:1.5,glitch:.2,vignette:.4}],
+ ['Terminal Amber',{style:'glyph',charset:'classic',colorMode:'mono',fg:'#ffb000',bg:'#120a00',cell:9,crt:.5,scan:.6,bloom:.5,vignette:.6}],
+ ['VHS',{chroma:.7,split:.4,scan:.4,grain:.4,blur:.2,glitch:.3,vignette:.3,saturation:1.2}],
+ ['ASCII Warna',{style:'glyph',charset:'detailed',colorMode:'original',bg:'#000000',cell:7}],
+ ['Blueprint',{style:'cross',cell:10,colorMode:'mono',fg:'#cfe8ff',bg:'#0a2a6b',contrast:1.2}],
+ ['Diamond Print',{style:'diamond',cell:12,colorMode:'mono',fg:'#101010',bg:'#efe7d4',invert:true}]
+];
+function asciiText(st,rgba,cols,rows){ // rgba: Uint8ClampedArray dari canvas cols x rows
+  const ch=charsFor(st);let out='';
+  for(let y=0;y<rows;y++){let line='';for(let x=0;x<cols;x++){const i=(y*cols+x)*4;
+    let r=rgba[i]/255+st.brightness,g=rgba[i+1]/255+st.brightness,b=rgba[i+2]/255+st.brightness;
+    let l=0.299*r+0.587*g+0.114*b;l=(l-.5)*st.contrast+.5;l=clamp(l,0,1);if(st.invert)l=1-l;
+    line+=ch[Math.round(l*(ch.length-1))];}out+=line.replace(/\s+$/,'')+'\n';}
+  return out;
+}
+//#PURE-END
+
+/* ======================= WebGL2 FX engine ======================= */
+const VS=`#version 300 es
+layout(location=0) in vec2 p;out vec2 vUv;void main(){vUv=p*.5+.5;gl_Position=vec4(p,0.,1.);}`;
+const FS1=`#version 300 es
+precision highp float;precision highp sampler3D;
+in vec2 vUv;out vec4 o;
+uniform sampler2D uSrc,uAtlas;uniform sampler3D uLut;
+uniform vec2 uRes;
+uniform float uCell,uLod,uLutMix,uLutSize,uBright,uContrast,uSat,uInvert,uDither,uLevels,uAtlasN;
+uniform int uStyle,uColorMode,uPalN,uBayer;
+uniform vec3 uFg,uBg;uniform vec3 uPal[16];
+vec3 grade(vec3 c){
+  if(uLutMix>0.){vec3 p=clamp(c,0.,1.)*((uLutSize-1.)/uLutSize)+.5/uLutSize;c=mix(c,texture(uLut,p).rgb,uLutMix);}
+  c+=uBright;c=(c-.5)*uContrast+.5;float l=dot(c,vec3(.299,.587,.114));c=mix(vec3(l),c,uSat);return clamp(c,0.,1.);}
+vec3 samp(vec2 uv,float lod){return grade(textureLod(uSrc,uv,lod).rgb);}
+float bayer2(vec2 a){a=floor(a);return fract(a.x/2.+a.y*a.y*.75);}
+float bayer4(vec2 a){return bayer2(.5*a)*.25+bayer2(a);}
+float bayer8(vec2 a){return bayer4(.5*a)*.25+bayer2(a);}
+float bm(vec2 p){return uBayer==8?bayer8(p):(uBayer==2?bayer2(p):bayer4(p));}
+vec3 nearest(vec3 c){vec3 best=uPal[0];float bd=1e9;for(int i=0;i<16;i++){if(i>=uPalN)break;vec3 d=c-uPal[i];float e=dot(d,d);if(e<bd){bd=e;best=uPal[i];}}return best;}
+void main(){
+  vec2 px=vec2(vUv.x*uRes.x,(1.-vUv.y)*uRes.y);
+  vec3 col;
+  if(uStyle==0){col=samp(vUv,0.);}
+  else if(uStyle==10||uStyle==11){
+    vec2 cell=floor(px/uCell);vec2 uv=(cell+.5)*uCell/uRes;uv.y=1.-uv.y;
+    col=samp(uv,uLod);
+    if(uStyle==10){ if(uPalN>0)col=nearest(col);else col=floor(col*uLevels+.5)/uLevels; }
+    else{ float b=bm(cell)-.5;
+      if(uPalN>0)col=nearest(clamp(col+b*uDither*.6,0.,1.));
+      else{float l=dot(col,vec3(.299,.587,.114));if(uInvert>.5)l=1.-l;col=(l+b*uDither>.5)?uFg:uBg;} }
+  } else {
+    vec2 cell=floor(px/uCell);vec2 loc=fract(px/uCell);
+    vec2 uv=(cell+.5)*uCell/uRes;uv.y=1.-uv.y;
+    vec3 c=samp(uv,uLod);float l=dot(c,vec3(.299,.587,.114));if(uInvert>.5)l=1.-l;
+    vec2 q=loc-.5;float aa=1.5/uCell;float cov=0.;
+    vec3 cc=c/max(max(c.r,max(c.g,c.b)),.25);
+    vec3 fgc=(uColorMode==1)?uFg:cc;
+    vec3 outc=fgc;
+    float on=smoothstep(0.,.05,l);
+    if(uStyle==1){float idx=floor(l*(uAtlasN-1.)+.5);cov=texture(uAtlas,vec2((idx+loc.x)/uAtlasN,loc.y)).r;}
+    else if(uStyle==2){float d=length(q)*2.;float r=sqrt(l)*1.41;cov=(1.-smoothstep(r-aa*2.,r+aa*2.,d))*on;}
+    else if(uStyle==3){float d=min(abs(q.x),abs(q.y))*2.;cov=(1.-smoothstep(l-aa*2.,l+aa*2.,d))*on;}
+    else if(uStyle==4){float d=(abs(q.x)+abs(q.y))*2.;float r=l*2.;cov=(1.-smoothstep(r-aa*2.,r+aa*2.,d))*on;}
+    else if(uStyle==5){float d=abs(fract(q.x+q.y+.5)-.5)*2.;cov=(1.-smoothstep(l-aa*2.,l+aa*2.,d))*on;}
+    else if(uStyle==6){float d=abs(q.y)*2.;cov=(1.-smoothstep(l-aa*2.,l+aa*2.,d))*on;}
+    else if(uStyle==7){float d=length(q)*2.;cov=1.-smoothstep(.8-aa*2.,.8+aa*2.,d);outc=(uColorMode==1)?uFg*l:c;}
+    else if(uStyle==8){
+      float e=max(abs(q.x),abs(q.y));float tile=1.-smoothstep(.46,.5,e);float ds=length(q);
+      vec3 b=c*.85;float stud=1.-smoothstep(.28,.32,ds);
+      b=mix(b,c*(1.05+.35*dot(q,vec2(-.7,-.7))*2.),stud);
+      b*=1.-.35*smoothstep(.26,.31,ds)*(1.-smoothstep(.31,.36,ds));
+      outc=(uColorMode==1)?uFg*l*(b.r+b.g+b.b)/max(c.r+c.g+c.b,.01):b;cov=tile;}
+    else if(uStyle==9){
+      float e=max(abs(q.x),abs(q.y));float tile=1.-smoothstep(.44,.48,e);
+      vec3 b=((uColorMode==1)?uFg*l:c)*(.92+.2*(-q.y));outc=b;cov=tile;}
+    col=mix(uBg,outc,cov);
+  }
+  o=vec4(col,1.);
+}`;
+const FS2=`#version 300 es
+precision highp float;in vec2 vUv;out vec4 o;
+uniform sampler2D uTex;uniform vec2 uRes;uniform float uTime;
+uniform float uVig,uScan,uCrt,uChroma,uBloom,uGrain,uGlitch,uSplit,uBlur,uPix,uTintA,uDust;
+uniform vec3 uTint;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+vec3 T(vec2 uv){return texture(uTex,uv).rgb;}
+void main(){
+  vec2 uv=vUv;
+  if(uCrt>0.){vec2 c=uv*2.-1.;c*=1.+uCrt*.12*dot(c,c);uv=c*.5+.5;if(uv.x<0.||uv.x>1.||uv.y<0.||uv.y>1.){o=vec4(0.,0.,0.,1.);return;}}
+  if(uPix>1.){uv=(floor(uv*uRes/uPix)+.5)*uPix/uRes;}
+  if(uGlitch>0.){float t=floor(uTime*10.);float band=floor(uv.y*24.);float n=h(vec2(band,t));
+    if(n>1.-uGlitch*.4)uv.x+=(h(vec2(band,t+7.))-.5)*.12*uGlitch;}
+  vec2 d=(uv-.5)*uChroma*.03+vec2(uSplit*.01,0.);
+  vec3 col=vec3(T(uv+d).r,T(uv).g,T(uv-d).b);
+  if(uBlur>0.){vec3 s=vec3(0.);vec2 px=uBlur*4./uRes;
+    for(int i=-2;i<=2;i++)for(int j=-2;j<=2;j++)s+=T(uv+vec2(float(i),float(j))*px);
+    col=mix(col,s/25.,min(1.,uBlur*1.5));}
+  if(uBloom>0.){vec3 b=vec3(0.);vec2 px=uBloom*14./uRes;
+    for(int i=0;i<12;i++){float a=float(i)*.5236;vec2 dv=vec2(cos(a),sin(a));
+      b+=max(T(uv+dv*px)-.55,0.);b+=max(T(uv+dv*px*2.)-.55,0.)*.6;}
+    col+=b/12.*uBloom*1.4;}
+  if(uScan>0.)col*=1.-uScan*.45*(.5+.5*sin(uv.y*uRes.y*2.0944));
+  if(uGrain>0.)col+=(h(uv*uRes+fract(uTime)*100.)-.5)*uGrain*.35;
+  if(uDust>0.){float dd=h(floor(uv*uRes/3.)+floor(uTime*12.));if(dd>1.-uDust*.004)col+=.5;}
+  if(uVig>0.)col*=1.-uVig*smoothstep(.25,.95,length(uv-.5)*1.4);
+  if(uTintA>0.)col=mix(col,col*uTint*1.7+uTint*.05,uTintA);
+  o=vec4(clamp(col,0.,1.),1.);
+}`;
+
+class FX{
+  constructor(canvas){
+    const gl=this.gl=canvas.getContext('webgl2',{preserveDrawingBuffer:true,antialias:false,alpha:false});
+    if(!gl)throw new Error('WebGL2 tidak didukung browser ini');
+    this.c=canvas;this.p1=this.mk(FS1);this.p2=this.mk(FS2);
+    const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+    this.vao=gl.createVertexArray();gl.bindVertexArray(this.vao);gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+    this.src=this.t2d();this.atlas=this.t2d();this.mid=this.t2d();this.fbo=gl.createFramebuffer();
+    gl.bindTexture(gl.TEXTURE_2D,this.atlas);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+    this.lut=gl.createTexture();this.lutOn=false;this.lutSize=2;this.setLut(null);
+    this.atlasKey='';this.atlasN=1;this.midW=0;this.midH=0;
+  }
+  mk(fs){
+    const gl=this.gl,p=gl.createProgram();
+    for(const [t,s] of [[gl.VERTEX_SHADER,VS],[gl.FRAGMENT_SHADER,fs]]){
+      const sh=gl.createShader(t);gl.shaderSource(sh,s);gl.compileShader(sh);
+      if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error('Shader: '+gl.getShaderInfoLog(sh));
+      gl.attachShader(p,sh);}
+    gl.bindAttribLocation(p,0,'p');gl.linkProgram(p);
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error('Link: '+gl.getProgramInfoLog(p));
+    return {p,loc:{}};
+  }
+  t2d(){const gl=this.gl,t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);return t;}
+  L(p,n){return p.loc[n]!==undefined?p.loc[n]:(p.loc[n]=this.gl.getUniformLocation(p.p,n));}
+  f(p,n,v){this.gl.uniform1f(this.L(p,n),v);}
+  i(p,n,v){this.gl.uniform1i(this.L(p,n),v);}
+  v2(p,n,a,b){this.gl.uniform2f(this.L(p,n),a,b);}
+  v3(p,n,a){this.gl.uniform3fv(this.L(p,n),a);}
+  setSource(el){
+    const gl=this.gl;gl.bindTexture(gl.TEXTURE_2D,this.src);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,el);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+    gl.generateMipmap(gl.TEXTURE_2D);
+  }
+  setLut(l){
+    const gl=this.gl;
+    if(!l){l={size:2,data:new Float32Array([0,0,0,1,0,0,0,1,0,1,1,0,0,0,1,1,0,1,0,1,1,1,1,1])};this.lutOn=false;}else this.lutOn=true;
+    gl.bindTexture(gl.TEXTURE_3D,this.lut);
+    for(const k of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T,gl.TEXTURE_WRAP_R])gl.texParameteri(gl.TEXTURE_3D,k,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_3D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texImage3D(gl.TEXTURE_3D,0,gl.RGB16F,l.size,l.size,l.size,0,gl.RGB,gl.FLOAT,l.data);
+    this.lutSize=l.size;
+  }
+  ensureAtlas(chars){
+    const key=chars.join('');if(key===this.atlasKey)return;this.atlasKey=key;
+    const cs=32,n=chars.length,cv=document.createElement('canvas');cv.width=cs*n;cv.height=cs;
+    const x=cv.getContext('2d');x.fillStyle='#000';x.fillRect(0,0,cv.width,cv.height);
+    x.fillStyle='#fff';x.textAlign='center';x.textBaseline='middle';
+    x.font=`${Math.round(cs*.9)}px "DejaVu Sans Mono",Menlo,Consolas,monospace`;
+    chars.forEach((ch,i)=>x.fillText(ch,i*cs+cs/2,cs/2+1));
+    const gl=this.gl;gl.bindTexture(gl.TEXTURE_2D,this.atlas);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,cv);this.atlasN=n;
+  }
+  ensureMid(w,h){
+    if(this.midW===w&&this.midH===h)return;const gl=this.gl;
+    gl.bindTexture(gl.TEXTURE_2D,this.mid);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,this.fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,this.mid,0);
+    this.midW=w;this.midH=h;
+  }
+  /** Render sumber (sudah di-upload lewat setSource) ke canvas dengan state st. */
+  render(st,srcW,w,h,t){
+    const gl=this.gl,c=this.c;
+    if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+    this.ensureMid(w,h);
+    const sid=STYLE_ID[st.style]||0;
+    if(sid===1)this.ensureAtlas(charsFor(st));
+    const pal=(sid===10||sid===11)?PAL[st.palette]:null;
+    const P=this.p1;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,this.fbo);gl.viewport(0,0,w,h);gl.useProgram(P.p);
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.src);
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,this.atlas);
+    gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_3D,this.lut);
+    this.i(P,'uSrc',0);this.i(P,'uAtlas',1);this.i(P,'uLut',2);
+    this.v2(P,'uRes',w,h);
+    this.f(P,'uCell',st.cell);
+    this.f(P,'uLod',Math.max(0,Math.log2(Math.max(1,st.cell*srcW/w))));
+    this.f(P,'uLutMix',this.lutOn?st.lutMix:0);this.f(P,'uLutSize',this.lutSize);
+    this.f(P,'uBright',st.brightness);this.f(P,'uContrast',st.contrast);this.f(P,'uSat',st.saturation);
+    this.f(P,'uInvert',st.invert?1:0);this.f(P,'uDither',st.dither);this.f(P,'uLevels',st.levels);this.f(P,'uAtlasN',this.atlasN);
+    this.i(P,'uStyle',sid);this.i(P,'uColorMode',st.colorMode==='mono'?1:0);
+    this.i(P,'uPalN',pal?pal.length:0);this.i(P,'uBayer',+st.bayer||4);
+    this.v3(P,'uFg',hex(st.fg));this.v3(P,'uBg',hex(st.bg));
+    const pa=new Float32Array(48);if(pal)pal.forEach((c3,k)=>pa.set(c3,k*3));
+    this.v3(P,'uPal[0]',pa);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+    const Q=this.p2;
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,w,h);gl.useProgram(Q.p);
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.mid);
+    this.i(Q,'uTex',0);this.v2(Q,'uRes',w,h);this.f(Q,'uTime',t);
+    this.f(Q,'uVig',st.vignette);this.f(Q,'uScan',st.scan);this.f(Q,'uCrt',st.crt);this.f(Q,'uChroma',st.chroma);
+    this.f(Q,'uBloom',st.bloom);this.f(Q,'uGrain',st.grain);this.f(Q,'uGlitch',st.glitch);this.f(Q,'uSplit',st.split);
+    this.f(Q,'uBlur',st.blur);this.f(Q,'uPix',st.pix);this.f(Q,'uTintA',st.tintA);this.f(Q,'uDust',st.dust);
+    this.v3(Q,'uTint',hex(st.tint));
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+}
+
+/* ======================= util: toast, simpan, mime, galeri ======================= */
+const IN_FLUTTER=!!window.__FLUTTER__;
+let _tt=0;function toast(m,ms=3200){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(_tt);_tt=setTimeout(()=>t.style.display='none',ms);}
+const stamp=()=>new Date().toISOString().replace(/[-:T]/g,'').slice(0,14);
+function blobToB64(b){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(b);});}
+async function saveBlob(blob,name){
+  if(IN_FLUTTER&&window.flutter_inappwebview){
+    try{await window.flutter_inappwebview.callHandler('saveFile',name,blob.type,await blobToB64(blob));return;}catch(e){}
+  }
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},4000);
+}
+function pickMime(pref){
+  const mp4=['video/mp4;codecs=avc1.640033,mp4a.40.2','video/mp4;codecs=avc1,mp4a.40.2','video/mp4'];
+  const webm=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
+  const list=pref==='mp4'?mp4.concat(webm):pref==='webm'?webm.concat(mp4):mp4.concat(webm);
+  for(const m of list)if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m))return m;
+  return '';
+}
+const extOf=m=>m.includes('mp4')?'mp4':'webm';
+
+const DB={
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('dualcam',1);r.onupgradeneeded=()=>r.result.createObjectStore('media',{keyPath:'id'});r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});},
+  async tx(mode,fn){const db=await this.open();return new Promise((res,rej)=>{const t=db.transaction('media',mode);const out=fn(t.objectStore('media'));t.oncomplete=()=>res(out.result);t.onerror=()=>rej(t.error);});},
+  put(rec){return this.tx('readwrite',s=>s.put(rec));},
+  del(id){return this.tx('readwrite',s=>s.delete(id));},
+  all(){return this.tx('readonly',s=>s.getAll());}
+};
+async function addGallery(blob,name){try{await DB.put({id:name+'_'+Math.random().toString(36).slice(2,6),name,type:blob.type,blob,ts:Date.now()});}catch(e){}}
+async function openGallery(onPick){
+  const grid=$('galGrid');grid.innerHTML='';let items=[];
+  try{items=(await DB.all()).sort((a,b)=>b.ts-a.ts);}catch(e){}
+  if(!items.length)grid.innerHTML='<div class="small">Galeri kosong. Hasil rekaman/foto dari tab Kamera muncul di sini.</div>';
+  const urls=[];
+  for(const it of items){
+    const u=URL.createObjectURL(it.blob);urls.push(u);
+    const d=document.createElement('div');d.className='gi';
+    const m=it.type.startsWith('video')?`<video src="${u}" muted preload="metadata"></video>`:`<img src="${u}">`;
+    d.innerHTML=m+`<div style="margin:4px 0;word-break:break-all">${it.name}</div><div class="btns"><button data-a="edit">Studio</button><button data-a="save">Simpan</button><button data-a="del">Hapus</button></div>`;
+    d.querySelector('[data-a=edit]').onclick=()=>{$('gal').close();(onPick||sendToStudio)(it.blob,it.name);};
+    d.querySelector('[data-a=save]').onclick=()=>saveBlob(it.blob,it.name);
+    d.querySelector('[data-a=del]').onclick=async()=>{await DB.del(it.id);d.remove();};
+    grid.appendChild(d);
+  }
+  $('gal').onclose=()=>urls.forEach(URL.revokeObjectURL);
+  $('gal').showModal();
+}
+
+/* ======================= STUDIO ======================= */
+const S={fx:null,st:{...DEF},el:null,kind:'',name:'',w:0,h:0,raf:0,exporting:false,peek:false,dirty:true,url:null,orig:null,ui:null,ready:false};
+function outSize(){const m=+$('outMax').value,sc=Math.min(1,m/Math.max(S.w,S.h));return [even(S.w*sc),even(S.h*sc)];}
+function needLoop(){
+  if(S.kind==='video'&&(!S.el.paused||S.exporting))return true;
+  return !!(S.st.animate&&(S.st.glitch>0||S.st.grain>0||S.st.dust>0));
+}
+function renderStudio(){
+  if(!S.el)return;const [w,h]=outSize();
+  if(S.kind==='video'||S.dirty){S.fx.setSource(S.el);S.dirty=false;}
+  S.fx.render(S.peek?DEF:S.st,S.w,w,h,performance.now()/1000);
+  if(S.kind==='video'&&S.el.duration){
+    $('vSeek').value=Math.round(S.el.currentTime/S.el.duration*1000);
+    const t=S.el.currentTime|0;$('vTime').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');}
+}
+function tick(){S.raf=0;try{renderStudio();}catch(e){toast('Render gagal: '+e.message);return;}if(needLoop())S.raf=requestAnimationFrame(tick);}
+function req(){if(!S.raf&&S.ready)S.raf=requestAnimationFrame(tick);}
+
+function buildParams(){
+  const box=$('paramBox');box.innerHTML='';const secs={};const rows=[];
+  for(const p of PARAMS){
+    if(!secs[p.sec]){const d=document.createElement('details');d.open=p.sec==='Gaya';d.innerHTML=`<summary>${p.sec}</summary>`;box.appendChild(d);secs[p.sec]=d;}
+    const row=document.createElement('div');row.className='row';
+    const lab=document.createElement('label');lab.textContent=p.l;row.appendChild(lab);
+    let inp;
+    if(p.t==='range'){inp=document.createElement('input');inp.type='range';inp.min=p.min;inp.max=p.max;inp.step=p.step;}
+    else if(p.t==='select'){inp=document.createElement('select');p.o.forEach(o=>{const op=document.createElement('option');op.value=o[0];op.textContent=o[1];inp.appendChild(op);});}
+    else if(p.t==='color'){inp=document.createElement('input');inp.type='color';}
+    else if(p.t==='check'){inp=document.createElement('input');inp.type='checkbox';}
+    else{inp=document.createElement('input');inp.type='text';inp.style.flex='1';}
+    inp.oninput=inp.onchange=()=>{
+      let v=p.t==='check'?inp.checked:inp.value;
+      if(p.t==='range'||p.num)v=+v;
+      S.st[p.k]=v;sync();req();};
+    row.appendChild(inp);secs[p.sec].appendChild(row);rows.push({p,inp,row});
+  }
+  S.ui=rows;
+}
+function sync(){
+  for(const {p,inp,row} of S.ui){
+    if(p.t==='check')inp.checked=!!S.st[p.k];else inp.value=S.st[p.k];
+    row.classList.toggle('h',p.show?!p.show(S.st):false);}
+}
+function setState(patch){S.st={...DEF,...sanitize(patch)};sync();req();}
+
+async function setSource(el,kind,w,h,name,url){
+  if(S.url&&S.url!==url)URL.revokeObjectURL(S.url);
+  if(S.kind==='video'&&S.el&&S.el!==el)S.el.pause();
+  S.el=el;S.kind=kind;S.w=w;S.h=h;S.name=name;S.url=url;S.dirty=true;
+  $('vidBar').style.display=kind==='video'?'block':'none';
+  $('stInfo').textContent=`${name} · ${w}×${h} · ${kind==='video'?'video':'gambar'}`;
+  req();
+}
+async function loadBlob(blob,name){
+  const url=URL.createObjectURL(blob);
+  try{
+    if(blob.type.startsWith('video')){
+      const v=document.createElement('video');v.src=url;v.playsInline=true;v.loop=true;v.preload='auto';
+      await new Promise((res,rej)=>{v.onloadeddata=res;v.onerror=()=>rej(new Error('Video tidak bisa dibuka'));});
+      v.onplay=req;v.onseeked=req;v.onpause=req;
+      await setSource(v,'video',v.videoWidth,v.videoHeight,name,url);
+    }else{
+      const im=new Image();im.src=url;await im.decode();
+      await setSource(im,'image',im.naturalWidth,im.naturalHeight,name,url);
+    }
+    S.orig=null;$('bOrig').style.display='none';
+  }catch(e){toast(e.message||String(e));}
+}
+function sendToStudio(blob,name){showTab('studio');loadBlob(blob,name);}
+
+function frameB64(maxDim=1024){
+  const c=document.createElement('canvas');const sc=Math.min(1,maxDim/Math.max(S.w,S.h));
+  c.width=even(S.w*sc);c.height=even(S.h*sc);c.getContext('2d').drawImage(S.el,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',.9).split(',')[1];
+}
+async function gem(model,body){
+  const key=$('gKey').value.trim();if(!key)throw new Error('Isi API key Gemini dulu');
+  localStorage.setItem('gemKey',key);localStorage.setItem('gemImg',$('gImgM').value);localStorage.setItem('gemTxt',$('gTxtM').value);
+  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(body)});
+  if(!r.ok)throw new Error('Gemini '+r.status+': '+(await r.text()).slice(0,260));
+  return r.json();
+}
+const GEN_PRESETS=[
+ ['Bebas (hanya prompt)',''],
+ ['1-bit dither','Recreate as 1-bit black and white ordered dither artwork, crisp pixels, no gray tones'],
+ ['Claymation','Turn into a handmade claymation scene, soft plasticine textures, studio lighting'],
+ ['Kaca patri','Redraw as a stained glass window with bold lead lines and luminous colored glass'],
+ ['Lukisan minyak potret','Repaint as a classical oil portrait with visible brush strokes and warm chiaroscuro'],
+ ['Papan neon','Render as a glowing neon sign on a dark brick wall'],
+ ['Cat air','Transform into a loose watercolor painting with soft bleeding edges and paper texture'],
+ ['Sprite pixel art','Convert into detailed 16-bit pixel art with a limited palette'],
+ ['Anime cel','Redraw as a hand-painted anime cel with clean lines and flat shading'],
+ ['Kota cyberpunk','Reimagine in a rainy cyberpunk city at night with neon reflections'],
+ ['Polaroid vintage','Make it look like a faded vintage polaroid photo from the 1970s'],
+ ['Sketsa pensil','Convert into a detailed graphite pencil sketch on paper'],
+ ['Bata LEGO','Rebuild the scene entirely out of LEGO bricks and minifigure-style parts'],
+ ['Potongan kertas','Recreate as layered paper-cut art with depth shadows'],
+ ['Low-poly','Turn into a low-poly 3D geometric illustration'],
+ ['Komik halftone','Redraw as a retro comic book panel with halftone dots and bold ink outlines'],
+ ['Ukiyo-e','Recreate as a Japanese ukiyo-e woodblock print'],
+ ['Diorama isometrik','Convert into a miniature isometric diorama with tilt-shift lighting'],
+ ['Papan kapur','Redraw as colorful chalk art on a blackboard'],
+ ['Blueprint','Redraw as a technical blueprint with white line work on blue paper']
+];
+async function aiGenerate(){
+  if(!S.el)return toast('Buka sumber dulu');
+  const preset=GEN_PRESETS[+$('gPreset').selectedIndex][1],extra=$('gPrompt').value.trim();
+  if(!preset&&!extra)return toast('Pilih preset atau isi prompt');
+  const keep={high:'Keep the original composition, subjects and proportions very closely.',mid:'Keep the main subject and overall composition recognizable.',low:'Use the photo only as loose inspiration; be creative.'}[$('gStr').value];
+  const prompt=[preset,extra,keep,'Output a single image only.'].filter(Boolean).join('. ');
+  $('gMsg').textContent='Menghasilkan gambar...';$('gGo').disabled=true;
+  try{
+    const j=await gem($('gImgM').value.trim(),{contents:[{role:'user',parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:frameB64()}}]}],generationConfig:{responseModalities:['TEXT','IMAGE']}});
+    const parts=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[];
+    const img=parts.find(p=>p.inlineData||p.inline_data);
+    if(!img){const t=parts.map(p=>p.text||'').join(' ').slice(0,200);throw new Error('Tidak ada gambar dari model. '+t);}
+    const d=img.inlineData||img.inline_data;const mime=d.mimeType||d.mime_type||'image/png';
+    const bin=atob(d.data);const u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+    const blob=new Blob([u8],{type:mime});
+    if(!S.orig)S.orig={el:S.el,kind:S.kind,w:S.w,h:S.h,name:S.name,url:S.url};
+    const keepUrl=S.url;const url=URL.createObjectURL(blob);const im=new Image();im.src=url;await im.decode();
+    S.url=null; // jangan revoke sumber asli
+    await setSource(im,'image',im.naturalWidth,im.naturalHeight,'AI_'+S.orig.name,url);
+    S.url=url;$('bOrig').style.display='';$('gMsg').textContent='Selesai. Hasil AI sekarang jadi sumber; tambahkan gaya/efek bila mau.';
+    void keepUrl;
+  }catch(e){$('gMsg').textContent=e.message;}
+  $('gGo').disabled=false;
+}
+async function aiRecipe(){
+  const desc=($('gPrompt').value.trim()||GEN_PRESETS[+$('gPreset').selectedIndex][0]);
+  if(!desc)return toast('Tulis deskripsi look di kolom prompt');
+  const schema=PARAMS.map(p=>p.t==='range'?`${p.k}: number ${p.min}..${p.max}`:p.t==='select'?`${p.k}: one of ${p.o.map(o=>o[0]).join('|')}`:p.t==='color'?`${p.k}: "#rrggbb"`:p.t==='check'?`${p.k}: boolean`:`${p.k}: string (karakter gelap ke terang)`).join('\n');
+  $('gMsg').textContent='Membuat recipe...';
+  try{
+    const j=await gem($('gTxtM').value.trim(),{contents:[{role:'user',parts:[{text:`Kamu mendesain efek visual untuk editor foto/video. Buat satu look untuk deskripsi: "${desc}".\nBalas HANYA objek JSON dengan kunci (hanya yang perlu) dari daftar ini:\n${schema}\nGaya "none" berarti tanpa gaya; pilih gaya yang sesuai.`}]}],generationConfig:{responseMimeType:'application/json'}});
+    const txt=j.candidates[0].content.parts.map(p=>p.text||'').join('').replace(/```json|```/g,'').trim();
+    setState(JSON.parse(txt));$('gMsg').textContent='Recipe AI diterapkan. Silakan atur manual.';
+  }catch(e){$('gMsg').textContent=e.message;}
+}
+
+async function exportVideo(){
+  if(S.kind!=='video')return toast('Sumber bukan video');
+  const v=S.el;const mime=pickMime('auto');if(!mime)return toast('Browser tidak mendukung MediaRecorder');
+  const fps=+$('eFps').value;
+  S.exporting=true;v.loop=false;v.pause();
+  await new Promise(r=>{if(v.currentTime===0)return r();v.addEventListener('seeked',r,{once:true});v.currentTime=0;});
+  const stream=S.fx.c.captureStream(fps);let tap=null;
+  try{
+    const ac=v._ac||(v._ac=(()=>{const c=new (window.AudioContext||window.webkitAudioContext)();return {c,node:c.createMediaElementSource(v),dest:c.createMediaStreamDestination()};})());
+    await ac.c.resume();ac.node.disconnect();ac.node.connect(ac.dest);
+    ac.dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));tap=ac;
+  }catch(e){}
+  const mr=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:Math.min(80e6,Math.round(S.w*S.h*fps*0.12))});
+  const chunks=[];mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  const prog=$('eProg');prog.style.display='block';$('eVid').disabled=true;
+  const upd=setInterval(()=>{prog.value=v.duration?v.currentTime/v.duration:0;},200);
+  const done=new Promise(r=>{mr.onstop=r;});
+  v.onended=()=>mr.stop();mr.start(1000);v.play();req();
+  toast('Mengekspor… biarkan tab tetap terbuka');
+  await done;clearInterval(upd);prog.style.display='none';$('eVid').disabled=false;
+  S.exporting=false;v.loop=true;
+  if(tap){try{tap.node.disconnect();tap.node.connect(tap.c.destination);}catch(e){}}
+  const blob=new Blob(chunks,{type:mime.split(';')[0]});
+  const name=`STUDIO_${stamp()}.${extOf(mime)}`;
+  await addGallery(blob,name);await saveBlob(blob,name);toast('Video tersimpan: '+name);req();
+}
+function exportImage(type){
+  if(!S.el)return toast('Buka sumber dulu');
+  renderStudio();
+  S.fx.c.toBlob(async b=>{const name=`STUDIO_${stamp()}.${type==='png'?'png':'jpg'}`;await addGallery(b,name);await saveBlob(b,name);toast('Tersimpan: '+name);},type==='png'?'image/png':'image/jpeg',.95);
+}
+function copyAscii(){
+  if(!S.el)return toast('Buka sumber dulu');
+  const st=S.st,cell=Math.max(2,st.cell);
+  const cols=Math.max(10,Math.min(300,Math.floor(S.w/cell))),rows=Math.max(5,Math.round(cols*S.h/S.w*0.5));
+  const c=document.createElement('canvas');c.width=cols;c.height=rows;const x=c.getContext('2d');x.drawImage(S.el,0,0,cols,rows);
+  const txt=asciiText(st,x.getImageData(0,0,cols,rows).data,cols,rows);
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Teks ASCII disalin ('+cols+'×'+rows+')'),()=>{saveBlob(new Blob([txt],{type:'text/plain'}),`ascii_${stamp()}.txt`);});
+}
+
+function initStudio(){
+  if(S.fx)return;
+  try{S.fx=new FX($('stCv'));}catch(e){$('stInfo').textContent='Error: '+e.message;return;}
+  S.ready=true;buildParams();sync();
+  {const lutRow=document.createElement('div');lutRow.className='row';
+   lutRow.innerHTML='<label>LUT .cube/.3dl</label><input id="sLutF" type="file" accept=".cube,.3dl">';
+   const det=[...$('paramBox').children].find(d=>d.textContent.startsWith('Warna'));
+   if(det)det.insertBefore(lutRow,det.children[1]);
+   $('sLutF').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{S.fx.setLut(parseLut(f.name,await f.text()));toast('LUT dimuat: '+f.name);req();}catch(err){toast(err.message);}};}
+  const rb=$('recipes');
+  RECIPES.forEach(([n,r])=>{const b=document.createElement('button');b.textContent=n;b.onclick=()=>setState(r);rb.appendChild(b);});
+  const rs=document.createElement('button');rs.textContent='↺ Reset';rs.onclick=()=>setState({});rb.appendChild(rs);
+  GEN_PRESETS.forEach(p=>{const o=document.createElement('option');o.textContent=p[0];$('gPreset').appendChild(o);});
+  $('gKey').value=localStorage.getItem('gemKey')||'';
+  $('gImgM').value=localStorage.getItem('gemImg')||'gemini-2.5-flash-image';
+  $('gTxtM').value=localStorage.getItem('gemTxt')||'gemini-2.5-flash';
+  $('stFile').onchange=e=>{const f=e.target.files[0];if(f)loadBlob(f,f.name);};
+  $('stGal').onclick=()=>openGallery(loadBlob);
+  $('outMax').onchange=req;
+  const pk=$('bPeek');const on=v=>()=>{S.peek=v;req();};
+  pk.onpointerdown=on(true);pk.onpointerup=pk.onpointerleave=pk.onpointercancel=on(false);
+  $('bOrig').onclick=async()=>{if(!S.orig)return;const o=S.orig;S.orig=null;await setSource(o.el,o.kind,o.w,o.h,o.name,o.url);$('bOrig').style.display='none';};
+  $('vPlay').onclick=()=>{if(S.kind!=='video')return;S.el.paused?S.el.play():S.el.pause();req();};
+  $('vSeek').oninput=e=>{if(S.kind==='video'&&S.el.duration){S.el.currentTime=e.target.value/1000*S.el.duration;}};
+  $('gGo').onclick=aiGenerate;$('gRec').onclick=aiRecipe;
+  $('epng').onclick=()=>exportImage('png');$('ejpg').onclick=()=>exportImage('jpg');$('eTxt').onclick=copyAscii;$('eVid').onclick=exportVideo;
+  const st=document.querySelector('#pgStudio .stage');
+  st.ondragover=e=>e.preventDefault();
+  st.ondrop=e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f)loadBlob(f,f.name);};
+  window.addEventListener('paste',e=>{const f=[...(e.clipboardData?e.clipboardData.files:[])][0];if(f&&!$('pgStudio').hidden)loadBlob(f,f.name||'paste.png');});
+}
+
+/* ======================= KAMERA (dual 16:9 + 9:16) ======================= */
+const C={dz:1,cap:null,gen:0,fx:null,st:{...DEF},stream:null,video:null,on:false,recs:[],cL:null,cP:null,xL:null,xP:null,vw:0,vh:0,lutName:'',frames:0,t0:0};
+function cropRect(vw,vh,a){let w,h;if(vw/vh>=a){h=vh;w=h*a;}else{w=vw;h=w/a;}return {x:(vw-w)/2,y:(vh-h)/2,w,h};}
+function zoomed(cr){const z=C.dz;if(z<=1)return cr;const w=cr.w/z,h=cr.h/z;return {x:cr.x+(cr.w-w)/2,y:cr.y+(cr.h-h)/2,w,h};}
+/* rasio: pilihan umum + kustom (W:H) */
+const RL=['16:9','4:3','3:2','21:9','2.39:1','1:1'],RP=['9:16','3:4','2:3','4:5','9:21','1:1'];
+function parseRatio(t){const p=String(t).split(/[:xX\/]/).map(Number);return(p.length===2&&p[0]>0&&p[1]>0)?p[0]/p[1]:NaN;}
+function ratioL(){const s=$('cRL');return s.value==='custom'?(parseRatio($('cRLc').value)||16/9):parseRatio(s.value);}
+function ratioP(){const s=$('cRP');return s.value==='custom'?(parseRatio($('cRPc').value)||9/16):parseRatio(s.value);}
+function tgtDims(a,short){let w,h;if(a>=1){h=short;w=short*a;}else{w=short;h=short/a;}const m=Math.max(w,h);if(m>4096){const k=4096/m;w*=k;h*=k;}return [even(w),even(h)];}
+function cropOf(W,H,a){return W/H>=a?{w:H*a,h:H}:{w:W,h:W/a};}
+function activeOutputs(){const m=$('cMode').value;const o=[];if(m!=='portrait')o.push(ratioL());if(m!=='landscape')o.push(ratioP());return o;}
+function fitsFrame(W,H,short){return activeOutputs().every(a=>{const c=cropOf(W,H,a),[tw,th]=tgtDims(a,short);return c.w+2>=tw&&c.h+2>=th;});}
+function camDims(){
+  const short=+$('cShort').value,mode=$('cMode').value,out={};
+  for(const k of ['L','P']){
+    if((mode==='landscape'&&k==='P')||(mode==='portrait'&&k==='L'))continue;
+    const a=k==='L'?ratioL():ratioP(),cr=cropRect(C.vw,C.vh,a);let [w,h]=tgtDims(a,short);
+    if(w>cr.w||h>cr.h){const f=Math.min(cr.w/w,cr.h/h);w=even(w*f);h=even(h*f);}
+    out[k]={w,h,cr,a};
+  }
+  return out;
+}
+function camGuides(){
+  const d=camDims();const W=C.vw,H=C.vh;
+  for(const [k,id] of [['L','g1'],['P','g2']]){
+    const g=$(id);if(!d[k]){g.style.display='none';continue;}
+    const c=zoomed(d[k].cr);g.style.display='block';
+    g.style.left=(c.x/W*100)+'%';g.style.top=(c.y/H*100)+'%';g.style.width=(c.w/W*100)+'%';g.style.height=(c.h/H*100)+'%';
+  }
+}
+const SRC_SIZES=[[1280,720],[1920,1080],[2560,1440],[3840,2160]];
+function updateResOptions(){
+  const cap=C.cap;let note='';
+  for(const o of $('cShort').options){
+    const s=+o.value;let ok=true;
+    if(cap){const W=Math.max(cap.w,cap.h),H=Math.min(cap.w,cap.h);ok=fitsFrame(W,H,s);}
+    o.disabled=!ok;o.textContent=o.textContent.replace(/ ✗$/,'')+(ok?'':' ✗');
+  }
+  const cur=$('cShort').selectedOptions[0];
+  if(cur&&cur.disabled)note='Resolusi ini melebihi kemampuan kamera untuk rasio terpilih; output diturunkan otomatis.';
+  $('resNote').textContent=note||(cap?`Maks kamera: ${cap.w}×${cap.h}`:'');
+}
+function camFrame(gen){
+  if(!C.on||gen!==C.gen)return;
+  const v=C.video;
+  if(v.readyState>=2&&v.videoWidth){
+    if(v.videoWidth!==C.vw||v.videoHeight!==C.vh){C.vw=v.videoWidth;C.vh=v.videoHeight;camGuides();}
+    const w=Math.min(C.vw,3840),h=Math.round(w*C.vh/C.vw);
+    try{
+      C.fx.setSource(v);C.fx.render(C.st,C.vw,even(w),even(h),performance.now()/1000);
+      const gl=C.fx.c,d=camDims();
+      for(const k of ['L','P']){
+        if(!d[k])continue;const cv=k==='L'?C.cL:C.cP,x=k==='L'?C.xL:C.xP;
+        if(!C.recs.length&&(cv.width!==d[k].w||cv.height!==d[k].h)){cv.width=d[k].w;cv.height=d[k].h;}
+        const s=gl.width/C.vw,cr=zoomed(d[k].cr);
+        x.drawImage(gl,cr.x*s,cr.y*s,cr.w*s,cr.h*s,0,0,cv.width,cv.height);
+      }
+    }catch(e){toast('Render kamera gagal: '+e.message);}
+    C.frames++;
+    if(performance.now()-C.t0>1000){$('camInfo').textContent=`${C.vw}×${C.vh} · ~${C.frames} fps`;C.frames=0;C.t0=performance.now();}
+  }
+  if(v.requestVideoFrameCallback)v.requestVideoFrameCallback(()=>camFrame(gen));else requestAnimationFrame(()=>camFrame(gen));
+}
+async function fillDevices(){
+  try{const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+    const sel=$('camSel'),cur=sel.value;sel.innerHTML='';
+    ds.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||('Kamera '+(i+1));sel.appendChild(o);});
+    if(cur)sel.value=cur;}catch(e){}
+}
+async function camStart(){
+  camStop();
+  const short=+$('cShort').value,mode=$('cMode').value,fps=+$('cFps').value;
+  const src=SRC_SIZES.find(([w,h])=>fitsFrame(w,h,short))||SRC_SIZES[SRC_SIZES.length-1];
+  const id=$('camSel').value;
+  const cons={video:{width:{ideal:src[0]},height:{ideal:src[1]},frameRate:{ideal:fps}},audio:$('cMic').checked?{echoCancellation:false,noiseSuppression:false}:false};
+  if(id)cons.video.deviceId={exact:id};else cons.video.facingMode='environment';
+  try{
+    try{C.stream=await navigator.mediaDevices.getUserMedia(cons);}
+    catch(e){if(cons.audio){cons.audio=false;C.stream=await navigator.mediaDevices.getUserMedia(cons);toast('Mikrofon tidak tersedia, merekam tanpa suara');}else throw e;}
+  }catch(e){return toast('Kamera gagal: '+(e.message||e.name));}
+  await fillDevices();
+  const tr=C.stream.getVideoTracks()[0];if(tr&&tr.getSettings().deviceId)$('camSel').value=tr.getSettings().deviceId;
+  try{const cp=tr.getCapabilities?tr.getCapabilities():{};C.cap=(cp.width&&cp.height)?{w:cp.width.max,h:cp.height.max}:null;}catch(e){C.cap=null;}
+  C.video=document.createElement('video');C.video.muted=true;C.video.playsInline=true;C.video.srcObject=C.stream;
+  await C.video.play();
+  if(!C.fx){C.fx=new FX($('camCv'));C.cL=document.createElement('canvas');C.cP=document.createElement('canvas');C.xL=C.cL.getContext('2d');C.xP=C.cP.getContext('2d');}
+  C.vw=C.video.videoWidth;C.vh=C.video.videoHeight;C.on=true;C.t0=performance.now();camGuides();
+  $('bRec').disabled=$('bPhoto').disabled=false;$('bStart').textContent='Mulai ulang kamera';
+  updateResOptions();buildZoom();buildPro();camFrame(++C.gen);
+}
+function camStop(){
+  if(C.recs.length)stopRec();
+  C.on=false;if(C.stream)C.stream.getTracks().forEach(t=>t.stop());C.stream=null;
+  $('bRec').disabled=$('bPhoto').disabled=true;
+}
+function buildPro(){
+  const box=$('proBox');box.innerHTML='';
+  const tr=C.stream&&C.stream.getVideoTracks()[0];let caps={};
+  try{caps=tr.getCapabilities?tr.getCapabilities():{};}catch(e){}
+  const defs=[['exposureCompensation','EV'],['iso','ISO'],['exposureTime','Shutter'],['focusDistance','Fokus'],['colorTemperature','WB (K)']];
+  let n=0;
+  for(const [k,l] of defs){
+    const c=caps[k];if(!c||c.max===undefined)continue;n++;
+    const row=document.createElement('div');row.className='row';
+    row.innerHTML=`<label>${l}</label><input type="range" min="${c.min}" max="${c.max}" step="${c.step||(c.max-c.min)/100}" value="${c.min}">`;
+    row.querySelector('input').oninput=e=>{
+      const adv={[k]:+e.target.value};
+      if(k==='iso'||k==='exposureTime')adv.exposureMode='manual';
+      if(k==='focusDistance')adv.focusMode='manual';
+      if(k==='colorTemperature')adv.whiteBalanceMode='manual';
+      tr.applyConstraints({advanced:[adv]}).catch(()=>{});};
+    box.appendChild(row);
+  }
+  if(!n)box.textContent='Browser/kamera ini tidak mengekspos kontrol manual (umumnya hanya Chrome Android/desktop tertentu).';
+  else{const b=document.createElement('button');b.textContent='Kembali ke otomatis';
+    b.onclick=()=>{tr.applyConstraints({advanced:[{exposureMode:'continuous',focusMode:'continuous',whiteBalanceMode:'continuous'}]}).catch(()=>{});buildPro();};box.appendChild(b);}
+}
+function setZoom(v){
+  const tr=C.stream&&C.stream.getVideoTracks()[0];if(!tr)return;
+  $('cZoom').value=v;$('cZoomV').textContent=(+v).toFixed(1)+'×';
+  if(C.hwZoom){C.dz=1;tr.applyConstraints({advanced:[{zoom:+v}]}).catch(()=>{});}else C.dz=+v;
+  camGuides();
+}
+function buildZoom(){
+  const tr=C.stream.getVideoTracks()[0];let z=null;
+  try{const cp=tr.getCapabilities?tr.getCapabilities():{};if(cp.zoom&&cp.zoom.max>cp.zoom.min)z=cp.zoom;}catch(e){}
+  C.hwZoom=!!z;C.dz=1;
+  const min=z?z.min:1,max=z?Math.min(z.max,30):8,r=$('cZoom');
+  r.min=min;r.max=max;r.step=z&&z.step?Math.max(z.step,0.01):0.05;
+  const stops=new Set();if(min<0.95)stops.add(Math.ceil(min*10)/10);
+  [1,2,3,5,10].forEach(v=>{if(v>=min&&v<=max)stops.add(v);});
+  const box=$('zStops');box.innerHTML='';
+  [...stops].sort((a,b)=>a-b).forEach(v=>{const b=document.createElement('button');b.textContent=v+'×';b.onclick=()=>setZoom(v);box.appendChild(b);});
+  const cur=Math.min(Math.max(1,min),max);setZoom(cur);
+  if(!z)$('cZoomV').title='Zoom digital (kamera tidak mengekspos zoom optik)';
+}
+function startRec(){
+  const mime=pickMime($('cCodec').value);if(!mime)return toast('Browser tidak mendukung MediaRecorder');
+  const fps=+$('cFps').value,d=camDims(),bps=+$('cBr').value*1e6,aud=C.stream.getAudioTracks();
+  const t=stamp();
+  for(const k of ['L','P']){
+    if(!d[k])continue;const cv=k==='L'?C.cL:C.cP;
+    const cs=cv.captureStream(fps);const clones=aud.map(a=>a.clone());clones.forEach(a=>cs.addTrack(a));
+    const mr=new MediaRecorder(cs,{mimeType:mime,videoBitsPerSecond:bps});const chunks=[];
+    mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+    mr.onstop=async()=>{
+      clones.forEach(a=>a.stop());
+      const blob=new Blob(chunks,{type:mime.split(';')[0]});const name=`${k==='L'?'LAND':'PORT'}_${t}.${extOf(mime)}`;
+      await addGallery(blob,name);if($('cAuto').checked)await saveBlob(blob,name);toast('Video tersimpan: '+name);
+    };
+    mr.start(1000);C.recs.push(mr);
+  }
+  $('bRec').textContent='■ Stop';
+}
+function stopRec(){C.recs.forEach(m=>{try{m.stop();}catch(e){}});C.recs=[];$('bRec').textContent='● Rekam';}
+function takePhoto(){
+  const d=camDims(),t=stamp();
+  for(const k of ['L','P']){
+    if(!d[k])continue;const cv=k==='L'?C.cL:C.cP;
+    cv.toBlob(async b=>{const name=`${k==='L'?'LAND':'PORT'}_${t}.jpg`;await addGallery(b,name);if($('cAuto').checked)await saveBlob(b,name);toast('Foto tersimpan: '+name);},'image/jpeg',.95);
+  }
+}
+function initCamera(){
+  for(const [id,list] of [['cRL',RL],['cRP',RP]]){
+    const sel=$(id);sel.innerHTML=list.map(r=>`<option>${r}</option>`).join('')+'<option value="custom">Kustom…</option>';
+    sel.onchange=()=>{$(id+'c').style.display=sel.value==='custom'?'':'none';camGuides();updateResOptions();};
+    $(id+'c').oninput=()=>{camGuides();updateResOptions();};
+  }
+  $('cRP').value='9:16';
+  $('cZoom').oninput=e=>setZoom(e.target.value);
+  $('bStart').onclick=camStart;
+  $('bRec').onclick=()=>C.recs.length?stopRec():startRec();
+  $('bPhoto').onclick=takePhoto;
+  $('cBr').oninput=e=>$('cBrV').textContent=e.target.value;
+  $('cShort').onchange=()=>{if(C.on&&!C.recs.length)camStart();else updateResOptions();};
+  $('cMode').onchange=()=>{if(C.on&&!C.recs.length){camGuides();updateResOptions();}};
+  $('cFps').onchange=()=>{if(C.on&&!C.recs.length)camStart();};
+  $('camSel').onchange=()=>{if(C.on&&!C.recs.length)camStart();};
+  const rs=$('cRecipe');rs.innerHTML='<option value="-1">Tanpa efek</option>';
+  RECIPES.forEach((r,i)=>{const o=document.createElement('option');o.value=i;o.textContent=r[0];rs.appendChild(o);});
+  rs.onchange=()=>{const i=+rs.value,m=C.st.lutMix;C.st={...DEF,...(i>=0?sanitize(RECIPES[i][1]):{}),lutMix:m};};
+  $('cLutM').oninput=e=>{C.st.lutMix=+e.target.value;};
+  $('cLutF').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+    try{if(!C.fx){C.fx=new FX($('camCv'));C.cL=document.createElement('canvas');C.cP=document.createElement('canvas');C.xL=C.cL.getContext('2d');C.xP=C.cP.getContext('2d');}
+      C.fx.setLut(parseLut(f.name,await f.text()));toast('LUT dimuat: '+f.name);}catch(err){toast(err.message);}};
+}
+
+/* ======================= Tab & init ======================= */
+function showTab(t){
+  const st=t==='studio';
+  $('pgCam').hidden=st;$('pgStudio').hidden=!st;
+  $('tabCam').classList.toggle('on',!st);$('tabStudio').classList.toggle('on',st);
+  if(st){camStop();initStudio();$('stCv').parentElement.parentElement.scrollIntoView({block:'nearest'});req();}
+}
+window.addEventListener('DOMContentLoaded',()=>{
+  $('tabCam').onclick=()=>showTab('cam');$('tabStudio').onclick=()=>showTab('studio');
+  $('btnGal').onclick=()=>openGallery();$('galX').onclick=()=>$('gal').close();
+  initCamera();
+  if(IN_FLUTTER||location.hash==='#studio'){$('tabCam').style.display='none';showTab('studio');}
+  if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+});
+</script>
+</body>
+</html>
